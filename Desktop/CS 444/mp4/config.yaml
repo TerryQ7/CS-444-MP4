@@ -9,3 +9,13 @@ vit_linear:
     net_class: ViTLinear
     batch_size: 32
 
+vpt_deep:
+    lr: 0.01
+    wd: 0.01
+    epochs: 100
+    optimizer: 'sgd'
+    scheduler: 'multi_step'
+    momentum: 0.9
+    net_class: VPTDeep
+    batch_size: 32
+    prompt_len: 10
