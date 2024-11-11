@@ -176,7 +176,7 @@ class VPTDeep(nn.Module):
         self.prompts = nn.Parameter(torch.zeros(1, num_layers, prompt_len, hidden_dim))
 
         # 使用均匀分布初始化提示参数
-        val = math.sqrt(6. / float(3 * self.hidden_dim + self.hidden_dim))
+        val = (6. / float(3 * self.hidden_dim + self.hidden_dim)) ** 0.5
         nn.init.uniform_(self.prompts, -val, val)
 
         # 新的分类头

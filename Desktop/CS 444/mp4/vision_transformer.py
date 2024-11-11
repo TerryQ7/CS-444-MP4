@@ -245,7 +245,8 @@ class VisionTransformer(nn.Module):
         if isinstance(self.conv_proj, nn.Conv2d):
             # Init the patchify stem
             fan_in = self.conv_proj.in_channels * self.conv_proj.kernel_size[0] * self.conv_proj.kernel_size[1]
-            nn.init.trunc_normal_(self.conv_proj.weight, std=math.sqrt(1 / fan_in))
+            std = (1 / fan_in) ** 0.5
+            nn.init.trunc_normal_(self.conv_proj.weight, std=std)
             if self.conv_proj.bias is not None:
                 nn.init.zeros_(self.conv_proj.bias)
         elif self.conv_proj.conv_last is not None and isinstance(self.conv_proj.conv_last, nn.Conv2d):
