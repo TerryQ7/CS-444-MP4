@@ -166,8 +166,9 @@ class VPTDeep(nn.Module):
         self.vit_b.heads = nn.Identity()  # 移除原始的分类头
 
         # 冻结 ViT 主干网络的参数
-        for param in self.vit_b.parameters():
-            param.requires_grad = False
+        # 确保分类头的参数被训练
+        for param in self.head.parameters():
+            param.requires_grad = True
 
         # 初始化可学习的提示参数，形状为 (1, num_layers, prompt_len, hidden_dim)
         self.prompt_len = prompt_len
@@ -176,8 +177,8 @@ class VPTDeep(nn.Module):
         self.prompts = nn.Parameter(torch.zeros(1, num_layers, prompt_len, hidden_dim))
 
         # 使用均匀分布初始化提示参数
-        val = (6. / float(3 * self.hidden_dim + self.hidden_dim)) ** 0.5
-        nn.init.uniform_(self.prompts, -val, val)
+        v = (6. / float(2 * self.hidden_dim)) ** 0.5
+        nn.init.uniform_(self.prompts, -v, v)
 
         # 新的分类头
         self.head = nn.Linear(hidden_dim, n_classes)
