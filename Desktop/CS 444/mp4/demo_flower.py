@@ -3,7 +3,7 @@ import torch
 from absl import app, flags
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
-from finetune import ViTLinear, inference, Trainer
+from finetune import ViTLinear, inference, Trainer, VPTDeep
 import yaml
 
 from datasets import get_flower102
@@ -23,6 +23,8 @@ def get_config(exp_name, encoder):
     # add/modify hyperparameters of your class in config.yaml
     encoder_registry = {
         'ViTLinear': ViTLinear,
+        'vpt_deep': VPTDeep,
+    
     }
     with open("config.yaml", "r") as f:
         config = yaml.safe_load(f)[exp_name]
@@ -32,7 +34,7 @@ def get_config(exp_name, encoder):
     epochs = config['epochs']
     optimizer = config['optimizer']
     scheduler = config['scheduler']
-    momentum = config['momentum']
+    momentum = config.get('momentum', 0.9)
     net_class = encoder_registry[config['net_class']]
     batch_size = config['batch_size']
 

@@ -104,6 +104,12 @@ class Trainer():
         if scheduler == 'multi_step':
             self.lr_schedule = torch.optim.lr_scheduler.MultiStepLR(
                 self.optimizer, milestones=[60, 80], gamma=0.1)
+            
+        if optimizer == 'adamw':
+            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=wd)
+
+        if scheduler == 'cosine':
+            self.lr_schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.epochs)
 
     def train_epoch(self):
         self.model.train()
@@ -167,8 +173,8 @@ class VPTDeep(nn.Module):
 
         # 冻结 ViT 主干网络的参数
         # 确保分类头的参数被训练
-        for param in self.head.parameters():
-            param.requires_grad = False
+        # for param in self.head.parameters():
+        #     param.requires_grad = False
 
         # 初始化可学习的提示参数，形状为 (1, num_layers, prompt_len, hidden_dim)
         self.prompt_len = prompt_len

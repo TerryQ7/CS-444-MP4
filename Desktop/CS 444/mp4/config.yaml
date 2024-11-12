@@ -10,7 +10,7 @@ vit_linear:
     batch_size: 32
 
 vpt_deep:
-    lr: 0.01
+    lr: 1e-4
     wd: 0.01
     epochs: 200
     optimizer: 'sgd'
@@ -19,3 +19,12 @@ vpt_deep:
     net_class: VPTDeep
     batch_size: 64
     prompt_len: 10
+
+full_finetune:
+    lr: 5e-5
+    wd: 0.01
+    epochs: 50
+    optimizer: 'adamw'
+    scheduler: 'cosine'
+    net_class: VPTDeep 
+    batch_size: 32
