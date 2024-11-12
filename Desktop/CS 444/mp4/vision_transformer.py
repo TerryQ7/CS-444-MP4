@@ -145,24 +145,14 @@ class Encoder(nn.Module):
 
     def forward(self, input: torch.Tensor, prompts: Optional[torch.Tensor] = None):
         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-        seq_len = input.size(1)
+        x = input + self.pos_embedding
 
-        if prompts is not None:
-            # 计算新的序列长度
-            prompt_len = prompts.size(2)
-            total_len = seq_len + prompt_len
-            # 调整位置嵌入
-            pos_embedding = self.pos_embedding[:, :total_len, :]
-        else:
-            pos_embedding = self.pos_embedding[:, :seq_len, :]
-
-        x = input
-
+        # 如果提供了 prompts，在每一层添加
         for i, layer in enumerate(self.layers):
             if prompts is not None:
-                prompt = prompts[:, i, :, :]
-                x = torch.cat([prompt, x], dim=1)
-            x = x + pos_embedding
+                # 获取第 i 层的提示，形状为 (batch_size, prompt_len, hidden_dim)
+                prompt = prompts[:, i, :, :]  # 提示的维度应为 (batch_size, num_layers, prompt_len, hidden_dim)
+                x = torch.cat([prompt, x], dim=1)  # 在序列长度维度上连接
             x = layer(x)
         x = self.ln(x)
         return x

@@ -12,10 +12,10 @@ vit_linear:
 vpt_deep:
     lr: 0.01
     wd: 0.01
-    epochs: 100
+    epochs: 200
     optimizer: 'sgd'
     scheduler: 'multi_step'
     momentum: 0.9
     net_class: VPTDeep
-    batch_size: 32
+    batch_size: 64
     prompt_len: 10
