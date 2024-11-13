@@ -139,18 +139,17 @@ class Encoder(nn.Module):
         self.ln = norm_layer(hidden_dim)
 
     def forward(self, input: torch.Tensor, prompts: Optional[torch.Tensor] = None):
-      torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-      x = input
+        torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
+        x = input
 
-      for i, layer in enumerate(self.layers):
-          if prompts is not None:
-              prompt = prompts[:, i, :, :]  # (batch_size, prompt_len, hidden_dim)
-              x = torch.cat([prompt, x], dim=1)
-          pos_embedding = self.pos_embedding[:, :x.size(1), :]  # 调整位置嵌入的长度
-          x = x + pos_embedding
-          x = layer(x)
-      x = self.ln(x)
-      return x
+        for i, layer in enumerate(self.layers):
+            if prompts is not None:
+                # Get the prompts for the current layer
+                prompt = prompts[:, i, :, :]  # Shape: (batch_size, prompt_len, hidden_dim)
+                x = torch.cat([prompt, x], dim=1)  # Concatenate prompts with input tokens
+            x = layer(x)
+        x = self.ln(x)
+        return x
 
 class VisionTransformer(nn.Module):
     """Vision Transformer as per https://arxiv.org/abs/2010.11929."""
@@ -283,19 +282,15 @@ class VisionTransformer(nn.Module):
         return x
 
     def forward(self, x: torch.Tensor, prompts: Optional[torch.Tensor] = None):
-        # Reshape and permute the input tensor
         x = self._process_input(x)
         n = x.shape[0]
 
-        # Expand the class token to the full batch
         batch_class_token = self.class_token.expand(n, -1, -1)
         x = torch.cat([batch_class_token, x], dim=1)
 
         x = self.encoder(x, prompts)
 
-        # Classifier "token" as used by standard language architectures
-        x = x[:, 0]
-
+        x = x[:, 0]  # Extract the [CLS] token
         x = self.heads(x)
 
         return x

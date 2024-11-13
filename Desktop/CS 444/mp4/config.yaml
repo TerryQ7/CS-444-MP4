@@ -17,14 +17,5 @@ vpt_deep:
     scheduler: 'multi_step'
     momentum: 0.9
     net_class: VPTDeep
-    batch_size: 64
-    prompt_len: 10
-
-full_finetune:
-    lr: 1e-5
-    wd: 0.05
-    epochs: 50
-    optimizer: 'adamw'
-    scheduler: 'warmup_cosine'
-    net_class: ViTLinear
     batch_size: 32
+    prompt_len: 20
