@@ -10,9 +10,9 @@ vit_linear:
     batch_size: 32
 
 vpt_deep:
-    lr: 1e-4
+    lr: 0.01
     wd: 0.01
-    epochs: 200
+    epochs: 100
     optimizer: 'sgd'
     scheduler: 'multi_step'
     momentum: 0.9
@@ -21,10 +21,10 @@ vpt_deep:
     prompt_len: 10
 
 full_finetune:
-    lr: 5e-5
-    wd: 0.01
+    lr: 1e-5
+    wd: 0.05
     epochs: 50
     optimizer: 'adamw'
-    scheduler: 'cosine'
-    net_class: VPTDeep 
+    scheduler: 'warmup_cosine'
+    net_class: ViTLinear
     batch_size: 32

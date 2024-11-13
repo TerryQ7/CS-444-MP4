@@ -29,20 +29,25 @@ def get_encoder(name):
 class ViTLinear(nn.Module):
     def __init__(self, n_classes, encoder_name):
         super(ViTLinear, self).__init__()
-        
-        self.vit_b = [get_encoder(encoder_name)]
-        
+
+        self.vit_b = get_encoder(encoder_name)
+
+        # 冻结 ViT 模型的前几个层
+        num_layers_to_freeze = 6  # 冻结前 6 层
+        for name, param in self.vit_b.named_parameters():
+            if 'encoder.layers' in name:
+                layer_num = int(name.split('encoder_layer_')[1].split('.')[0])
+                if layer_num < num_layers_to_freeze:
+                    param.requires_grad = False
+            else:
+                param.requires_grad = True  # 其他参数设为可训练
+
         # Reinitialize the head with a new layer
-        self.vit_b[0].heads[0] = nn.Identity()
+        self.vit_b.heads = nn.Identity()
         self.linear = nn.Linear(768, n_classes)
-    
-    def to(self, device):
-        super(ViTLinear, self).to(device)
-        self.vit_b[0] = self.vit_b[0].to(device)
 
     def forward(self, x):
-        with torch.no_grad():
-            out = self.vit_b[0](x)
+        out = self.vit_b(x)
         y = self.linear(out)
         return y
     
@@ -96,35 +101,55 @@ class Trainer():
         # 只优化需要训练的参数
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
 
+        # 优化器设置
         if optimizer == 'sgd':
-            self.optimizer = torch.optim.SGD(trainable_params, 
+            self.optimizer = torch.optim.SGD(self.model.parameters(), 
                                              lr=lr, weight_decay=wd,
                                              momentum=momentum)
-            
+        elif optimizer == 'adamw':
+            self.optimizer = torch.optim.AdamW(self.model.parameters(), 
+                                               lr=lr, weight_decay=wd)
+        else:
+            raise ValueError(f"Unknown optimizer: {optimizer}")
+
+        # 学习率调度器设置
         if scheduler == 'multi_step':
             self.lr_schedule = torch.optim.lr_scheduler.MultiStepLR(
                 self.optimizer, milestones=[60, 80], gamma=0.1)
-            
-        if optimizer == 'adamw':
-            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=wd)
-
-        if scheduler == 'cosine':
-            self.lr_schedule = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.epochs)
+        elif scheduler == 'cosine':
+            self.lr_schedule = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer, T_max=epochs)
+        elif scheduler == 'warmup_cosine':
+            total_steps = len(train_loader) * epochs
+            warmup_steps = int(0.1 * total_steps)  # 预热占总训练步骤的 10%
+            self.lr_schedule = torch.optim.lr_scheduler.SequentialLR(
+                self.optimizer,
+                schedulers=[
+                    torch.optim.lr_scheduler.LinearLR(self.optimizer, start_factor=1e-7 / lr, total_iters=warmup_steps),
+                    torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=total_steps - warmup_steps)
+                ],
+                milestones=[warmup_steps]
+            )
+        else:
+            raise ValueError(f"Unknown scheduler: {scheduler}")
 
     def train_epoch(self):
         self.model.train()
         total_loss, correct, n = 0., 0., 0
-        
+
         for x, y in self.train_loader:
             x, y = x.to(self.device), y.to(self.device)
+            self.optimizer.zero_grad()
             y_hat = self.model(x)
             loss = nn.CrossEntropyLoss()(y_hat, y)
-            total_loss += loss.item()
-            correct += (y_hat.argmax(dim=1) == y).float().mean().item()
             loss.backward()
             self.optimizer.step()
-            self.optimizer.zero_grad()
+            self.lr_schedule.step()  # 在每个优化步骤后更新学习率调度器
+
+            total_loss += loss.item()
+            correct += (y_hat.argmax(dim=1) == y).float().mean().item()
             n += 1
+
         return total_loss / n, correct / n
     
     def val_epoch(self):
@@ -171,10 +196,11 @@ class VPTDeep(nn.Module):
         self.vit_b = get_encoder(encoder_name)
         self.vit_b.heads = nn.Identity()  # 移除原始的分类头
 
+        # 确保提示参数和分类头的参数可训练
+
         # 冻结 ViT 主干网络的参数
-        # 确保分类头的参数被训练
-        # for param in self.head.parameters():
-        #     param.requires_grad = False
+        for param in self.vit_b.parameters():
+            param.requires_grad = False
 
         # 初始化可学习的提示参数，形状为 (1, num_layers, prompt_len, hidden_dim)
         self.prompt_len = prompt_len
@@ -182,9 +208,9 @@ class VPTDeep(nn.Module):
         self.hidden_dim = hidden_dim
         self.prompts = nn.Parameter(torch.zeros(1, num_layers, prompt_len, hidden_dim))
 
-        # 使用均匀分布初始化提示参数
-        val = (6. / float(3 * self.hidden_dim + self.hidden_dim)) ** 0.5
-        nn.init.uniform_(self.prompts, -val, val)
+        # 使用均匀分布初始化提示参数，避免使用 math 模块
+        v = (6. / (2 * self.hidden_dim)) ** 0.5  # 计算得到 v ≈ 0.0625
+        nn.init.uniform_(self.prompts, -v, v)
 
         # 新的分类头
         self.head = nn.Linear(hidden_dim, n_classes)

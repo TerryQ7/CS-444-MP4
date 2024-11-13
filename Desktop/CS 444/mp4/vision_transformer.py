@@ -78,36 +78,31 @@ class MLPBlock(MLP):
 class EncoderBlock(nn.Module):
     """Transformer encoder block."""
 
-    def __init__(
-        self,
-        num_heads: int,
-        hidden_dim: int,
-        mlp_dim: int,
-        dropout: float,
-        attention_dropout: float,
-        norm_layer: Callable[..., torch.nn.Module] = partial(nn.LayerNorm, eps=1e-6),
-    ):
+    def __init__(self, num_heads, hidden_dim, mlp_dim, dropout, attention_dropout, norm_layer):
         super().__init__()
         self.num_heads = num_heads
 
         # Attention block
         self.ln_1 = norm_layer(hidden_dim)
         self.self_attention = nn.MultiheadAttention(hidden_dim, num_heads, dropout=attention_dropout, batch_first=True)
-        self.dropout = nn.Dropout(dropout)
+        self.dropout1 = nn.Dropout(dropout)  # 新增
+        self.dropout = nn.Dropout(dropout)  # 原有
 
         # MLP block
         self.ln_2 = norm_layer(hidden_dim)
         self.mlp = MLPBlock(hidden_dim, mlp_dim, dropout)
+        self.dropout2 = nn.Dropout(dropout)  # 新增
 
     def forward(self, input: torch.Tensor):
         torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
         x = self.ln_1(input)
         x, _ = self.self_attention(x, x, x, need_weights=False)
-        x = self.dropout(x)
+        x = self.dropout1(x)  # 应用 Dropout
         x = x + input
 
         y = self.ln_2(x)
         y = self.mlp(y)
+        y = self.dropout2(y)  # 应用 Dropout
         return x + y
 
 
@@ -144,18 +139,18 @@ class Encoder(nn.Module):
         self.ln = norm_layer(hidden_dim)
 
     def forward(self, input: torch.Tensor, prompts: Optional[torch.Tensor] = None):
-        torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
-        x = input + self.pos_embedding
+      torch._assert(input.dim() == 3, f"Expected (batch_size, seq_length, hidden_dim) got {input.shape}")
+      x = input
 
-        # 如果提供了 prompts，在每一层添加
-        for i, layer in enumerate(self.layers):
-            if prompts is not None:
-                # 获取第 i 层的提示，形状为 (batch_size, prompt_len, hidden_dim)
-                prompt = prompts[:, i, :, :]  # 提示的维度应为 (batch_size, num_layers, prompt_len, hidden_dim)
-                x = torch.cat([prompt, x], dim=1)  # 在序列长度维度上连接
-            x = layer(x)
-        x = self.ln(x)
-        return x
+      for i, layer in enumerate(self.layers):
+          if prompts is not None:
+              prompt = prompts[:, i, :, :]  # (batch_size, prompt_len, hidden_dim)
+              x = torch.cat([prompt, x], dim=1)
+          pos_embedding = self.pos_embedding[:, :x.size(1), :]  # 调整位置嵌入的长度
+          x = x + pos_embedding
+          x = layer(x)
+      x = self.ln(x)
+      return x
 
 class VisionTransformer(nn.Module):
     """Vision Transformer as per https://arxiv.org/abs/2010.11929."""
