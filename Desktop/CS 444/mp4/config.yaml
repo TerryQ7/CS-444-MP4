@@ -18,4 +18,4 @@ vpt_deep:
     momentum: 0.9
     net_class: VPTDeep
     batch_size: 32
-    prompt_len: 10
+    prompt_len: 20
