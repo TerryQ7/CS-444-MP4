@@ -81,7 +81,7 @@ def inference(test_loader, model, device, result_path):
 
 class Trainer():
     def __init__(self, model, train_loader, val_loader, writer,
-                 optimizer, lr, wd, momentum, 
+                 optimizer, lr, wd, momentum,
                  scheduler, epochs, device):
         self.model = model
         self.train_loader = train_loader
@@ -93,17 +93,19 @@ class Trainer():
 
         self.model.to(self.device)
 
-        # 只优化需要训练的参数
+        # Only optimize the parameters that require gradients
         trainable_params = [p for p in self.model.parameters() if p.requires_grad]
 
         if optimizer == 'sgd':
-            self.optimizer = torch.optim.SGD(trainable_params, 
+            self.optimizer = torch.optim.SGD(trainable_params,
                                              lr=lr, weight_decay=wd,
                                              momentum=momentum)
-            
+
         if scheduler == 'multi_step':
+            # self.lr_schedule = torch.optim.lr_scheduler.MultiStepLR(
+            #     self.optimizer, milestones=[60, 80], gamma=0.1)
             self.lr_schedule = torch.optim.lr_scheduler.MultiStepLR(
-                self.optimizer, milestones=[60, 80], gamma=0.1)
+                self.optimizer, milestones=[50, 75], gamma=0.1)
 
     def train_epoch(self):
         self.model.train()
@@ -161,38 +163,39 @@ class VPTDeep(nn.Module):
     def __init__(self, n_classes, encoder_name, prompt_len=10, num_layers=12, hidden_dim=768):
         super(VPTDeep, self).__init__()
 
-        # 加载预训练的 ViT 模型
+        # Load pre-trained ViT model
         self.vit_b = get_encoder(encoder_name)
-        self.vit_b.heads = nn.Identity()  # 移除原始的分类头
+        self.vit_b.heads = nn.Identity()  # Remove the original classification head
 
-        # 冻结 ViT 主干网络的参数
-        # 确保分类头的参数被训练
-        for param in self.head.parameters():
-            param.requires_grad = False
+        # Freeze all layers except the last transformer layer
+        for name, param in self.vit_b.named_parameters():
+            if 'encoder.layers.encoder_layer_11' in name:  # Unfreeze the last layer
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
 
-        # 初始化可学习的提示参数，形状为 (1, num_layers, prompt_len, hidden_dim)
+        # Initialize learnable prompts: (1, num_layers, prompt_len, hidden_dim)
         self.prompt_len = prompt_len
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
         self.prompts = nn.Parameter(torch.zeros(1, num_layers, prompt_len, hidden_dim))
 
-        # 使用均匀分布初始化提示参数
+        # Initialize prompts using a uniform distribution
         val = (6. / float(3 * self.hidden_dim + self.hidden_dim)) ** 0.5
         nn.init.uniform_(self.prompts, -val, val)
 
-        # 新的分类头
+        # Define the new classification head
         self.head = nn.Linear(hidden_dim, n_classes)
 
     def forward(self, x):
-        # 获取批量大小
         batch_size = x.size(0)
 
-        # 将提示参数扩展到批量大小，形状为 (batch_size, num_layers, prompt_len, hidden_dim)
+        # Expand prompts to match the batch size
         prompts = self.prompts.expand(batch_size, -1, -1, -1)
 
-        # 将提示参数传递给 ViT 模型
+        # Pass inputs and prompts to the ViT model
         outputs = self.vit_b(x, prompts)
 
-        # 输出分类结果
+        # Get classification logits
         logits = self.head(outputs)
         return logits
